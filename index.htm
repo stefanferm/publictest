@@ -1,0 +1,375 @@
+﻿<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+    <script type="text/javascript">
+
+        // global varaiables
+        var restService = 'https://api.flickr.com/services/rest/?method=';
+        var key = '84c2d797bc059e72a5901e91d8876e1c';
+        var flickrMethodSearch = 'flickr.photos.search';
+        var flickrMethodgetSizes = 'flickr.photos.getSizes';
+        var perPage = 10;
+        var text = 'flower';
+        var photoID = '';
+        var mozilla = document.getElementById && !document.all;
+        var ie = document.all;
+        var contextisvisible = 0;
+        var el;
+        var selectedImgArray = [];
+        var galleryObjArray = [];
+
+
+        function displaymenu(e) {
+            el = document.getElementById("context_menu")
+            contextisvisible = 1
+            if (mozilla) {
+                el.style.left = pageXOffset + e.clientX + "px"
+                el.style.top = pageYOffset + e.clientY + "px"
+                el.style.visibility = "visible"
+                e.preventDefault()
+                return false
+            }
+            else if (ie) {
+                el.style.left = iebody().scrollLeft + event.clientX
+                el.style.top = iebody().scrollTop + event.clientY
+                el.style.visibility = "visible"
+                return false
+            }
+        };
+        function hidemenu() {
+            if (typeof el != "undefined" && contextisvisible) {
+                el.style.visibility = "hidden"
+                contextisvisible = 0
+            }
+        };
+        function createGallery() {
+            hidemenu();
+            removeObjFromObjArray();
+            removeNotSelectedImg();
+
+            addThumbnails();
+
+        };
+        function removeObjFromObjArray() {
+            for (var i = galleryObjArray.length - 1; i >= 0; i--) {
+                var remove = true;
+                var galleryObjArrayImgID = getFlickrPhotoID(galleryObjArray[i][0].source)
+                selectedImgArray.forEach(function (id) {
+                    if (galleryObjArrayImgID === id) {
+                        remove = false;
+                    }
+                });
+                if (remove) {
+                    galleryObjArray.splice(i, 1);
+                }
+            }
+
+
+        };
+        function addThumbnails(image) {
+            if (image) {
+
+                galleryObjArray.forEach(function (obj) {
+                    var galleryObjArrayImgID = getFlickrPhotoID(obj[0].source);
+                    if (image.id === galleryObjArrayImgID) {
+                        var bigImgHeight, bigImgwidth, bigImgSource;
+                        obj.forEach(function (size) {
+                            if (size.label === 'Large') {
+                                bigImgHeight = size.height;
+                                bigImgwidth = size.width;
+                                bigImgSource = size.source;
+                            }
+                            if (size.label === 'Thumbnail') {
+                                image.width = size.width;
+                                image.height = size.height;
+                                image.style.border = '2px solid #E8272C';
+                                image.onclick = function () {
+                                    addBigPhoto(image);
+                                };
+                            }
+                        });
+
+                    }
+                });
+            }
+        };
+        function addBigPhoto(img) {
+            var bigImgSource, bigImgwidth, bigImgHeight;
+            galleryObjArray.forEach(function (obj) {
+                var galleryObjArrayImgID = getFlickrPhotoID(obj[0].source);
+                if (img.id === galleryObjArrayImgID) {
+                    obj.forEach(function (size) {
+                        if (size.label === 'Large') {
+                            bigImgHeight = size.height;
+                            bigImgwidth = size.width;
+                            bigImgSource = size.source;
+                        }
+                    });
+                }
+
+            });
+            var bigImg = img_create(bigImgSource, null, null, bigImgwidth, bigImgHeight);
+            var bigPhotoDiv = document.getElementById('bigphoto');
+            clearPhotoDIV(bigPhotoDiv);
+            bigPhotoDiv.style.visibility = 'visible';
+            bigPhotoDiv.appendChild(bigImg);
+        };
+        function removeNotSelectedImg() {
+            var div = document.getElementById("divphoto");
+            var imgArray = div.getElementsByTagName('img');
+            for (var i = imgArray.length - 1; i >= 0; i--) {
+                var remove = true;
+                var img = imgArray[i];
+                selectedImgArray.forEach(function (id) {
+                    if (img.id === id) {
+                        remove = false;
+                        addThumbnails(img);
+                    }
+                });
+                if (remove) {
+                    div.removeChild(img);
+                } else {
+
+                }
+
+            }
+        };
+        function getFlickrPhotoID(url) {
+
+            return url.split('/').pop().split('_')[0];
+
+        };
+        function clearPhotoDIV(myNode) {
+            while (myNode.firstChild) {
+                myNode.removeChild(myNode.firstChild);
+            }
+        };
+        // click function called from search butttons onClick event
+        function myClick() {
+            selectedImgArray = [];
+            galleryObjArray = [];
+            var searchValue = document.getElementById('searchinp').value;
+            if (searchValue.length > 0 && searchValue.substring(0, 1) !== '') {
+                text = searchValue;
+            }
+            clearPhotoDIV(document.getElementById("divphoto"));
+            clearPhotoDIV(document.getElementById("bigphoto"));
+            ajaxRequest(getPhotoIDURL(), function (res) {
+                var test = res;
+                var photosArray = JSON.parse(res.responseText).photos.photo;
+
+                for (var i = 0; i < photosArray.length; i++) {
+                    photoID = photosArray[i].id;
+                    ajaxRequest(getSizesUrl(), function (res) {
+                        var galleryObj = JSON.parse(res.responseText).sizes.size;
+                        galleryObjArray.push(galleryObj);
+                        flickrJsonArrToImg('Medium', galleryObj);
+                    }, function (fail) {
+
+                    });
+                }
+            }, function (fail) { });
+        };
+        // function to create and return search url with text parameter in url
+        function getPhotoIDURL() {
+            return restService + flickrMethodSearch + '&api_key=' + key + '&text=' + text + '&per_page=' + perPage + '&format=json&nojsoncallback=1';
+        };
+        // function to create and return get image sizes and url with photoid parameter
+        function getSizesUrl() {
+            return restService + flickrMethodgetSizes + '&api_key=' + key + '&photo_id=' + photoID + '&format=json&nojsoncallback=1';
+        };
+        function flickrJsonArrToImg(label, jsonArray) {
+            for (var i = 0; i < jsonArray.length; i++) {
+                if (jsonArray[i].label === label) {
+                    var imgObj = jsonArray[i];
+
+
+                    imgObj = img_create(imgObj.source, null, null, imgObj.width, imgObj.height, label);
+                    imgObj.id = getFlickrPhotoID(imgObj.src);
+                    addImgToDIV("divphoto", imgObj);
+                }
+            }
+
+        };
+        //add img to div
+        function addImgToDIV(divID, img) {
+            var div = document.getElementById(divID);
+
+            div.appendChild(img);
+
+        };
+        //function for create img// IEWIN boolean previously sniffed through eg. conditional comments
+        function img_create(src, alt, title, width, height) {
+            var IEWIN = getInternetExplorerVersion();
+            var img = IEWIN ? new Image() : document.createElement('img');
+            img.src = src;
+            if (alt != null) {
+                img.alt = alt;
+            }
+            if (title != null) {
+                img.title = title
+            }
+            if (width != null) {
+                img.width = width;
+            }
+            if (height != null) {
+                img.height = height;
+            }
+            img.style.border = '2px solid #E8272C';
+            img.style.margin = '10';
+            img.style.display = 'block';
+
+            img.style.marginTop = '20px';
+
+
+            img.onclick = function () {
+                if (img.style.border === '4px solid blue') {
+                    img.style.border = '2px solid #E8272C';
+                    removeSelectedImg(img.id);
+                } else {
+                    img.style.border = '4px solid blue';
+                    selectedImgArray.push(img.id);
+                }
+
+            };
+
+
+            if (mozilla) {
+                img.addEventListener("contextmenu", displaymenu, true)
+                img.addEventListener("click", hidemenu, true)
+            }
+            else if (ie) {
+                img.attachEvent("oncontextmenu", displaymenu)
+                img.attachEvent("onclick", hidemenu)
+            }
+            return img;
+        };
+        function removeSelectedImg(imgID) {
+            for (var i = 0; i < selectedImgArray.length; i++) {
+                if (selectedImgArray[i] === imgID) {
+                    selectedImgArray.splice(i, 1);
+                }
+            }
+        };
+        // Returns the version of Internet Explorer or false
+        // (indicating the use of another browser).
+        function getInternetExplorerVersion()      
+        {
+            var rv = false; // Return value assumes failure.
+            if (navigator.appName == 'Microsoft Internet Explorer') {
+                var ua = navigator.userAgent;
+                var re = new RegExp("MSIE ([0-9]{1,}[\.0-9]{0,})");
+                if (re.exec(ua) != null)
+                    rv = parseFloat(RegExp.$1);
+            }
+            return rv;
+        }
+        // ajax request with success and failure function
+        function ajaxRequest(url, successfunc, failfunc) {
+            var xmlhttp;
+            if (window.XMLHttpRequest) {
+                // code for IE7+, Firefox, Chrome, Opera, Safari
+                xmlhttp = new XMLHttpRequest();
+            } else {
+                // code for IE6, IE5
+                xmlhttp = new ActiveXObject("Microsoft.XMLHTTP");
+            }
+
+            xmlhttp.onreadystatechange = function () {
+                var fn = successfunc;
+                if (xmlhttp.readyState == XMLHttpRequest.DONE) {
+                    if (xmlhttp.status == 200) {
+
+                        fn(xmlhttp);
+
+
+
+                    }
+                    else if (xmlhttp.status == 400) {
+                        alert('There was an error 400')
+                    }
+                    else {
+                        alert('something else other than 200 was returned')
+                    }
+                }
+            }
+
+            xmlhttp.open("GET", url, true);
+            xmlhttp.send();
+        };
+
+        //-->
+    </script>
+    <style type="text/css">
+        .center
+        {
+            margin: 30px auto;
+            width: 80%;
+            padding: 10px;
+        }
+        .button
+        {
+            float: left;
+            padding-bottom: 10px;
+            clear: both;
+        }
+        a.button
+        {
+            color: #6e6e6e;
+            font: bold 12px Helvetica, Arial, sans-serif;
+            text-decoration: none;
+            padding: 2px 12px;
+            position: relative;
+            display: inline-block;
+            text-shadow: 0 1px 0 #fff;
+            -webkit-transition: border-color .218s;
+            -moz-transition: border .218s;
+            -o-transition: border-color .218s;
+            transition: border-color .218s;
+            background: #f3f3f3;
+            background: -webkit-gradient(linear,0% 40%,0% 70%,from(#F5F5F5),to(#F1F1F1));
+            background: -moz-linear-gradient(linear,0% 40%,0% 70%,from(#F5F5F5),to(#F1F1F1));
+            border: solid 1px #dcdcdc;
+            border-radius: 2px;
+            -webkit-border-radius: 2px;
+            -moz-border-radius: 2px;
+            margin-right: 10px;
+        }
+        a.button:hover
+        {
+            color: #333;
+            border-color: #999;
+            -moz-box-shadow: 0 2px 0 rgba(0, 0, 0, 0.2);
+            -webkit-box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+        }
+        a.button:active
+        {
+            color: #000;
+            border-color: #444;
+        }
+        .selected
+        {
+            color: blue;
+            background-color: #cf5c3f;
+        }
+    </style>
+    <title></title>
+</head>
+<body>
+    <div id="context_menu" class="button" style="border: 1px solid black; background-color: #EEEEEE;
+        visibility: hidden; position: absolute;">
+        <a class="button" onclick="createGallery()" href="#">Create Gallery</a>
+    </div>
+    <div class="center">
+        <div class="button">
+            <a onclick="myClick()" href="#" class="button">Search</a></div>
+        <input type="text" id="searchinp" />
+    </div>
+    <div style="text-align: left" id="divphoto">
+    </div>
+    <div id="bigphoto" style="visibility: hidden; position: absolute; left: 30%; top: 20%">
+        HELLOs
+    </div>
+</body>
+</html>
